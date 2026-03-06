@@ -1,7 +1,8 @@
 import os
 import hashlib
+import hashlib
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, PayloadSchemaType
 import google.generativeai as genai
 from pydantic_settings import BaseSettings
 
@@ -46,6 +47,17 @@ async def init_db():
         await qdrant_client.create_collection(
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+        )
+        # Crear índices para campos clave (optimización para filtros)
+        await qdrant_client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="date",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+        await qdrant_client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="category",
+            field_schema=PayloadSchemaType.KEYWORD,
         )
     else:
         print(f"La colección {COLLECTION_NAME} ya existe con la dimensión correcta.")
@@ -104,8 +116,8 @@ async def upsert_documents(documents: list[dict]):
     
     return None
 
-async def search_vectors(query: str, top_k: int = 5):
-    """Busca en Qdrant los vectores más similares a la consulta del usuario."""
+async def search_vectors(query: str, top_k: int = 5, query_filter: Filter = None):
+    """Busca en Qdrant los vectores más similares con soporte opcional para filtros."""
     try:
         query_embedding = get_embedding(query, task_type="retrieval_query")
         
@@ -114,6 +126,7 @@ async def search_vectors(query: str, top_k: int = 5):
                 response = await qdrant_client.query_points(
                     collection_name=COLLECTION_NAME,
                     query=query_embedding,
+                    query_filter=query_filter,
                     limit=top_k,
                     with_payload=True
                 )
@@ -124,6 +137,7 @@ async def search_vectors(query: str, top_k: int = 5):
             search_result = await qdrant_client.search(
                 collection_name=COLLECTION_NAME,
                 query_vector=query_embedding,
+                query_filter=query_filter,
                 limit=top_k,
                 with_payload=True
             )

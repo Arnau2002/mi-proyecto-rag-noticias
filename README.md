@@ -82,5 +82,6 @@ Una vez el servidor diga `Application startup complete`, abre tu navegador en:
 curl -X 'POST' \
   'http://localhost:8088/search/' \
   -H 'Content-Type: application/json' \
-  -d '{"query": "¿Qué está pasando con los cantones de basura en Madrid?"}'
+  -d '{"query": "¿Qué pasa con la basura?"}'
+  ## detectara Categoría : Tecnología
 ```

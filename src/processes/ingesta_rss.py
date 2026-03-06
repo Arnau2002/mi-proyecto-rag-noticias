@@ -1,6 +1,8 @@
 import asyncio
 import feedparser
 from bs4 import BeautifulSoup
+import datetime
+import time
 import sys
 import os
 
@@ -45,7 +47,17 @@ async def process_rss():
         title = entry.get("title", "Sin título")
         link = entry.get("link", "")
         # Algunos RSS utilizan 'published' y otros 'updated' para la fecha
-        date = entry.get("published", entry.get("updated", ""))
+        raw_date = entry.get("published", entry.get("updated", ""))
+        
+        # Intentar normalizar la fecha a ISO 8601
+        try:
+            if entry.get("published_parsed"):
+                dt = datetime.datetime.fromtimestamp(time.mktime(entry.published_parsed))
+                date_iso = dt.isoformat()
+            else:
+                date_iso = raw_date # Fallback si no se puede parsear
+        except:
+            date_iso = raw_date
         
         # El contenido principal puede venir bajo diferentes claves
         html_content = ""
@@ -75,9 +87,9 @@ async def process_rss():
                 "text": chunk,
                 "url": chunk_url,
                 "title": title,
-                "date": date,
+                "date": date_iso,
                 "source": link,
-                "category": "Inteligencia Artificial"
+                "category": "Tecnología" # Categoría base
             })
             
     print(f"Total chunks generados: {len(documents)}. Enviando a Qdrant y calculando embeddings...")

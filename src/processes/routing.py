@@ -1,5 +1,7 @@
 import google.generativeai as genai
-from services.vector_store import search_vectors
+from services.vector_store import search_vectors, Filter, FieldCondition, MatchValue
+import datetime
+import json
 
 def format_context(results) -> str:
     """Extrae y formatea el texto de los resultados de Qdrant."""
@@ -13,6 +15,31 @@ def format_context(results) -> str:
         context_text += f"Contenido: {payload.get('text')}\n"
     return context_text
 
+async def classify_query(query: str) -> dict:
+    """Usa Gemini para clasificar la categoría y extraer la intención."""
+    prompt = f"""
+    Eres un clasificador de consultas para un sistema RAG de noticias de tecnología.
+    Analiza la pregunta del usuario y devuelve un objeto JSON con dos campos:
+    - 'category': Una palabra clave (ej. 'OpenAI', 'Apple', 'NVIDIA', 'IA', 'General') si la pregunta es específica sobre una empresa o tecnología. Si no, usa 'Tecnología'.
+    - 'is_news_request': Booleano, true si el usuario busca noticias recientes.
+
+    Pregunta: {query}
+
+    Formato de salida (JSON puro):
+    {{
+        "category": "...",
+        "is_news_request": true/false
+    }}
+    """
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = await model.generate_content_async(prompt)
+        # Limpiar posible markdown del JSON
+        clean_json = response.text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_json)
+    except:
+        return {"category": "Tecnología", "is_news_request": True}
+
 async def generate_rag_response(query: str) -> dict:
     """
     Orquesta el flujo RAG:
@@ -21,8 +48,36 @@ async def generate_rag_response(query: str) -> dict:
     3. Construye el prompt estricto.
     4. Llama a Gemini.
     """
-    # 1. Recuperación de contexto Top 5 de la BD Vectorial
-    search_results = await search_vectors(query, top_k=5)
+    # 0. Clasificación y Enrutado Semántico
+    classification = await classify_query(query)
+    category = classification.get("category", "Tecnología")
+    is_news = classification.get("is_news_request", True)
+    
+    print(f"\n--- [LOG RAG] ---")
+    print(f"Pregunta: {query}")
+    print(f"Categoría detectada: {category}")
+    print(f"Es noticia reciente: {is_news}")
+    
+    # 1. Construcción de Filtros (Obsolescencia 30 días + Categoría)
+    now = datetime.datetime.now()
+    thirty_days_ago = (now - datetime.timedelta(days=30)).isoformat()
+    
+    print(f"Filtro temporal activo (Noticias > {thirty_days_ago})")
+
+    conditions = [
+        FieldCondition(key="date", range={"gte": thirty_days_ago})
+    ]
+    
+    # Si la categoría no es genérica, enrutamos/filtramos
+    if category != "Tecnología":
+        print(f"Aplicando filtro de enrutamiento por categoría: {category}")
+        conditions.append(FieldCondition(key="category", match=MatchValue(value=category)))
+    
+    query_filter = Filter(must=conditions)
+
+    # 2. Recuperación de contexto Top 5 de la BD Vectorial con Filtros
+    search_results = await search_vectors(query, top_k=5, query_filter=query_filter)
+    print(f"Resultados encontrados en BD: {len(search_results)}")
     
     if not search_results:
          return {
