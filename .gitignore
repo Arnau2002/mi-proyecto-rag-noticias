@@ -1,0 +1,31 @@
+# Entorno Virtual
+venv/
+ENV/
+env/
+.env
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Base de datos (Qdrant storage local)
+qdrant_data/
+
+# IDEs
+.vscode/
+.idea/
+
+# Distribución / Build
+dist/
+build/
+*.egg-info/
+
+# Logs
+*.log
+pip-log.txt
+
+# Sistema operativo
+Thumbs.db
+.DS_Store
